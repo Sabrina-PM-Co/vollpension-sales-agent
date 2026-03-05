@@ -1,0 +1,18 @@
+# Secrets – NIEMALS in Git!
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Datenbank (liegt im Docker Volume, nicht im Repo)
+*.db
+*.db-journal
+
+# Temporäres
+*.tmp
+*.log
+
+# macOS
+.DS_Store

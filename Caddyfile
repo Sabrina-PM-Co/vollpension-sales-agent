@@ -1,0 +1,31 @@
+# ─── Caddyfile – Reverse Proxy ────────────────────────────────────────────────
+#
+# Caddy übernimmt Port 80 + 443 und routet per Subdomain:
+#   vollpensionsalesagent.sabrinapilsmatiasek.com → Vollpension Agent (FastAPI, Port 8000)
+#   n8n.sabrinapilsmatiasek.com   → n8n (Port 5678, läuft direkt auf dem Host)
+#
+# Beide Subdomains bekommen automatisch HTTPS via Let's Encrypt.
+# Voraussetzung: beide A-Records zeigen auf die Hetzner-IP.
+
+# ── Vollpension Agent ─────────────────────────────────────────────────────────
+vollpensionsalesagent.sabrinapilsmatiasek.com {
+
+    reverse_proxy agent:8000
+
+    encode gzip
+
+    log {
+        output file /data/caddy_access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
+
+# ── n8n (läuft direkt auf dem Host, Port 5678) ────────────────────────────────
+n8n.sabrinapilsmatiasek.com {
+
+    reverse_proxy host.docker.internal:5678
+
+    encode gzip
+}

@@ -1,0 +1,73 @@
+version: "3.9"
+
+# ─── Pipedrive → Sevdesk Agent – Docker Compose ───────────────────────────────
+#
+# Services:
+#   agent  – FastAPI App (uvicorn)
+#   caddy  – Reverse Proxy mit automatischem HTTPS (Let's Encrypt)
+#
+# Starten:  docker compose up -d
+# Logs:     docker compose logs -f agent
+# Update:   git pull && docker compose up -d --build
+# Stop:     docker compose down
+#
+# Voraussetzung: .env Datei mit allen Werten aus .env.example befüllt
+
+services:
+
+  # ── FastAPI Agent ────────────────────────────────────────────────────────────
+  agent:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # SQLite-Datenbank in persistentem Volume
+      DB_PATH: /data/workflow_state.db
+    volumes:
+      # Persistente Datenbank – überlebt Container-Neustarts und Updates
+      - agent_data:/data
+    # Nur intern erreichbar – Caddy leitet von außen weiter
+    expose:
+      - "8000"
+    networks:
+      - internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ── Caddy Reverse Proxy + automatisches HTTPS ────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"     # HTTP → HTTPS Redirect
+      - "443:443"   # HTTPS
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # TLS-Zertifikate (persistent!)
+      - caddy_config:/config
+    # host.docker.internal ermöglicht Zugriff auf n8n (Port 5678) direkt am Host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - internal
+    depends_on:
+      - agent
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  agent_data:    # SQLite workflow_state.db
+  caddy_data:    # TLS-Zertifikate (Let's Encrypt)
+  caddy_config:  # Caddy interne Konfiguration
+
+# ─── Netzwerk ─────────────────────────────────────────────────────────────────
+networks:
+  internal:
+    driver: bridge
