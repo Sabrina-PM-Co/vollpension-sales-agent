@@ -210,7 +210,7 @@ def sevdesk_create_offer_draft(
             r = c.post(
                 f"{BASE}/Order",
                 headers=_headers(),
-                json={"model": order_payload},
+                json=order_payload,
                 timeout=30,
             )
             r.raise_for_status()
@@ -232,7 +232,7 @@ def sevdesk_create_offer_draft(
                 c.post(
                     f"{BASE}/OrderPos",
                     headers=_headers(),
-                    json={"model": pos_payload},
+                    json=pos_payload,
                     timeout=30,
                 )
 

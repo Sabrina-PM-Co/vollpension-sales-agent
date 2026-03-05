@@ -272,7 +272,7 @@ Wichtig: Nur Entwurf – nicht versenden!
         sevdesk_link=sevdesk_link,
         contact_name=contact_name,
         contact_email=contact_email,
-        extra_text=extra_hinweis,
+        warning_text=extra_hinweis,
         notify_person1=True,
         notify_person2=True,
     )
