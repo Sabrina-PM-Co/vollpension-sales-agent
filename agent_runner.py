@@ -105,6 +105,10 @@ def run_agent(
                 except Exception as e:
                     output = f"Tool-Fehler ({tb.name}): {e}"
 
+                # Logging: Tool-Name + ersten 300 Zeichen des Outputs
+                output_preview = str(output)[:300].replace("\n", " ")
+                print(f"   🔧 Tool [{tb.name}] → {output_preview}")
+
                 _collect(tb.name, tb.input, output, collected)
 
                 tool_results.append({

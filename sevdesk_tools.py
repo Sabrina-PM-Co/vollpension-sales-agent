@@ -203,12 +203,6 @@ def sevdesk_create_offer_draft(
             "currency": currency,
             "taxType": "default",
             "contact": {"id": contact_id, "objectName": "Contact"},
-            "contactPerson": {
-                # Wird vom System automatisch auf den Account-Inhaber gesetzt
-                # wenn leer gelassen – kann auch manuell befüllt werden
-                "objectName": "SevUser",
-            },
-            "address": f"Kontakt ID {contact_id}",
             "showNet": "1",
         }
 

@@ -206,9 +206,26 @@ Wichtig: Nur Entwurf – nicht versenden!
     # ── Ergebnis parsen ───────────────────────────────────────────────────
     summary_data: dict = {}
     try:
-        match = re.search(r'\{[\s\S]*?\}', result["summary"])
-        if match:
-            summary_data = json.loads(match.group())
+        # Suche nach dem LETZTEN/GRÖSSTEN JSON-Block (greedy, von rechts)
+        # Der Agent gibt oft zuerst Erklärtext aus, dann das JSON
+        decoder = json.JSONDecoder()
+        text = result["summary"]
+        idx = 0
+        while idx < len(text):
+            brace = text.find('{', idx)
+            if brace == -1:
+                break
+            try:
+                parsed, end_idx = decoder.raw_decode(text, brace)
+                if isinstance(parsed, dict) and parsed.get("order_id"):
+                    summary_data = parsed
+                    break
+                # Auch ohne order_id merken, falls nichts Besseres kommt
+                if isinstance(parsed, dict) and len(parsed) > len(summary_data):
+                    summary_data = parsed
+                idx = brace + 1
+            except json.JSONDecodeError:
+                idx = brace + 1
     except Exception:
         pass
 
