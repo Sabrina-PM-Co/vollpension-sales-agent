@@ -87,11 +87,12 @@ def verify_pipedrive_secret(request: Request) -> bool:
 
 def verify_slack_signature(request_body: bytes, timestamp: str, signature: str) -> bool:
     """Verifiziert Slack-Request-Signatur via HMAC-SHA256."""
-    if not SLACK_SIGNING_SECRET:
+    secret = SLACK_SIGNING_SECRET.strip()
+    if not secret:
         return True  # Nur in Entwicklung – in Produktion immer setzen!
     sig_basestring = f"v0:{timestamp}:{request_body.decode()}"
     expected = "v0=" + hmac.new(
-        SLACK_SIGNING_SECRET.encode(),
+        secret.encode(),
         sig_basestring.encode(),
         hashlib.sha256,
     ).hexdigest()
