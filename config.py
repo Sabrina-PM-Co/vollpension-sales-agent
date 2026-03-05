@@ -25,10 +25,11 @@ ADMIN_SECRET         = os.environ.get("ADMIN_SECRET", "")         # Schutz für 
 
 # ─── Slack ─────────────────────────────────────────────────────────────────────
 
-SLACK_BOT_TOKEN       = os.environ.get("SLACK_BOT_TOKEN", "")        # xoxb-...
-SLACK_APPROVAL_CHANNEL = os.environ.get("SLACK_APPROVAL_CHANNEL", "") # z.B. C0123456789
-SLACK_PERSON1_ID      = os.environ.get("SLACK_PERSON1_ID", "")       # Slack User-ID Person 1 (Vertrieb)
-SLACK_PERSON2_ID      = os.environ.get("SLACK_PERSON2_ID", "")       # Slack User-ID Person 2 (Buchhaltung)
+SLACK_BOT_TOKEN        = os.environ.get("SLACK_BOT_TOKEN", "")         # xoxb-...
+SLACK_CHANNEL_OFFERS   = os.environ.get("SLACK_CHANNEL_OFFERS", "")   # Channel für Angebots-Freigaben
+SLACK_CHANNEL_INVOICES = os.environ.get("SLACK_CHANNEL_INVOICES", "") # Channel für Rechnungen + Mahnungen
+SLACK_PERSON1_ID       = os.environ.get("SLACK_PERSON1_ID", "")       # Slack User-ID Person 1 (Vertrieb)
+SLACK_PERSON2_ID       = os.environ.get("SLACK_PERSON2_ID", "")       # Slack User-ID Person 2 (Buchhaltung)
 
 # ─── E-Mail-Benachrichtigung ───────────────────────────────────────────────────
 
@@ -61,8 +62,9 @@ for var, val in [
     ("PIPEDRIVE_API_TOKEN",  PIPEDRIVE_API_TOKEN),
     ("PIPEDRIVE_DOMAIN",     PIPEDRIVE_DOMAIN),
     ("SEVDESK_API_TOKEN",    SEVDESK_API_TOKEN),
-    ("SLACK_BOT_TOKEN",      SLACK_BOT_TOKEN),
-    ("SLACK_APPROVAL_CHANNEL", SLACK_APPROVAL_CHANNEL),
+    ("SLACK_BOT_TOKEN",        SLACK_BOT_TOKEN),
+    ("SLACK_CHANNEL_OFFERS",   SLACK_CHANNEL_OFFERS),
+    ("SLACK_CHANNEL_INVOICES", SLACK_CHANNEL_INVOICES),
 ]:
     if not val:
         _missing.append(var)

@@ -23,10 +23,17 @@ import re
 import httpx
 from config import (
     SLACK_BOT_TOKEN,
-    SLACK_APPROVAL_CHANNEL,
+    SLACK_CHANNEL_OFFERS,
+    SLACK_CHANNEL_INVOICES,
     SLACK_PERSON1_ID,
     SLACK_PERSON2_ID,
 )
+
+def _channel_for(request_type: str) -> str:
+    """Gibt den richtigen Slack-Channel je nach Request-Typ zurück."""
+    if request_type == "offer":
+        return SLACK_CHANNEL_OFFERS
+    return SLACK_CHANNEL_INVOICES
 from state_manager import (
     get_approval_request,
     set_approval_slack_ref,
@@ -205,7 +212,7 @@ def send_approval_request(
     ]
 
     resp = _slack_post("chat.postMessage", {
-        "channel": SLACK_APPROVAL_CHANNEL,
+        "channel": _channel_for(request_type),
         "text":    f"{mention_str} Freigabe erforderlich: {label} für {contact_name}",
         "blocks":  blocks,
     })
@@ -379,7 +386,7 @@ def send_revised_approval_request(
     ]
 
     resp = _slack_post("chat.postMessage", {
-        "channel": SLACK_APPROVAL_CHANNEL,
+        "channel": _channel_for(request_type),
         "text":    f"{mention_str} Revision {revision_count} bereit zur Freigabe: {label} für {contact_name}",
         "blocks":  blocks,
     })
@@ -391,10 +398,10 @@ def send_revised_approval_request(
     return {"channel": channel, "ts": ts}
 
 
-def post_status_update(message: str, thread_ts: str = None):
-    """Postet ein Status-Update in den Freigabe-Channel (optional als Thread-Antwort)."""
+def post_status_update(message: str, thread_ts: str = None, request_type: str = "offer"):
+    """Postet ein Status-Update in den passenden Slack-Channel (optional als Thread-Antwort)."""
     payload = {
-        "channel": SLACK_APPROVAL_CHANNEL,
+        "channel": _channel_for(request_type),
         "text":    message,
     }
     if thread_ts:
