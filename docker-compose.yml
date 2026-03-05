@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ─── Pipedrive → Sevdesk Agent – Docker Compose ───────────────────────────────
 #
 # Kein eigener Reverse Proxy – Nginx läuft bereits auf dem Host.
