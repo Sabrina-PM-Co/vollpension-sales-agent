@@ -194,16 +194,17 @@ def sevdesk_create_offer_draft(
         # Angebot anlegen (Status 100 = Entwurf)
         order_payload = {
             "header": deal_title,
-            "headText": intro_text or f"Vielen Dank für Ihr Interesse. Gerne unterbreiten wir Ihnen folgendes Angebot:",
+            "headText": intro_text or "Vielen Dank für Ihr Interesse. Gerne unterbreiten wir Ihnen folgendes Angebot:",
             "footText": outro_text or "Bei Fragen stehen wir Ihnen jederzeit zur Verfügung.",
             "orderDate": today,
             "deliveryDate": valid_until,
-            "status": "100",           # 100 = Entwurf
+            "status": 100,              # Integer! 100 = Entwurf
             "orderType": "AN",          # AN = Angebot
             "currency": currency,
             "taxType": "default",
-            "contact": {"id": contact_id, "objectName": "Contact"},
-            "showNet": "1",
+            "smallSettlement": False,
+            "contact": {"id": str(contact_id), "objectName": "Contact"},
+            "showNet": 1,               # Integer!
         }
 
         with httpx.Client() as c:
@@ -223,10 +224,10 @@ def sevdesk_create_offer_draft(
                 pos_payload = {
                     "order": {"id": str(order_id), "objectName": "Order"},
                     "name": pos.get("name", "Position"),
-                    "quantity": str(pos.get("quantity", 1)),
-                    "price": str(pos.get("price", 0.0)),
+                    "quantity": float(pos.get("quantity", 1)),
+                    "price": float(pos.get("price", 0.0)),
                     "unity": {"id": "1", "objectName": "Unity"},  # 1 = Stück
-                    "taxRate": str(pos.get("tax_rate", 20)),
+                    "taxRate": float(pos.get("tax_rate", 20)),
                     "text": pos.get("description", ""),
                 }
                 c.post(
