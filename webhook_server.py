@@ -147,6 +147,9 @@ async def pipedrive_new_deal(request: Request, background_tasks: BackgroundTasks
     current = payload.get("current", {})
     previous = payload.get("previous", {})
 
+    # DEBUG – zeigt die rohe Pipedrive Payload-Struktur
+    logger.info(f"🔍 Pipedrive Payload: action={action!r}, obj={obj!r}, keys={list(payload.keys())}, meta_keys={list(meta.keys())}")
+
     if obj != "deal":
         return JSONResponse({"status": "ignored", "reason": "Kein Deal-Event"})
 
