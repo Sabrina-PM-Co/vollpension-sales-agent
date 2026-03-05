@@ -335,17 +335,17 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
     timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
     signature = request.headers.get("X-Slack-Signature", "")
 
-    if not verify_slack_signature(body, timestamp, signature):
-        raise HTTPException(status_code=401, detail="Ungültige Slack-Signatur")
-
     try:
         data = json.loads(body)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Ungültiger JSON-Payload")
 
-    # Slack URL-Verification (einmalig beim Einrichten)
+    # Slack URL-Verification (einmalig beim Einrichten) – vor Signaturprüfung!
     if data.get("type") == "url_verification":
         return JSONResponse({"challenge": data.get("challenge")})
+
+    if not verify_slack_signature(body, timestamp, signature):
+        raise HTTPException(status_code=401, detail="Ungültige Slack-Signatur")
 
     event = data.get("event", {})
 
