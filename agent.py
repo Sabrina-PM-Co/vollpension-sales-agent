@@ -29,7 +29,7 @@ from pipedrive_fields import (
     get_interessensgebiet_ids,
 )
 from state_manager   import create_approval_request, add_agent_note, get_or_create_invoice_state
-from slack_approval  import send_new_approval_request, post_status_update
+from slack_approval  import send_approval_request, post_status_update
 from audit_logger    import start_run, finish_run
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -246,7 +246,7 @@ Wichtig: Nur Entwurf – nicht versenden!
     if anfrage_typ in ("generisch", "unvollstaendig") and team_hinweis:
         extra_hinweis = f"\n💡 *Interpretation:* {team_hinweis}"
 
-    send_new_approval_request(
+    send_approval_request(
         request_id=req["id"],
         request_type="offer",
         deal_title=deal_title,
