@@ -283,9 +283,9 @@ PIPEDRIVE_TOOL_DEFINITIONS = [
 ]
 
 PIPEDRIVE_TOOL_MAP = {
-    "pipedrive_get_deal": pipedrive_get_deal,
-    "pipedrive_update_deal": lambda d: pipedrive_update_deal(d["deal_id"], d["fields"]),
-    "pipedrive_get_person": pipedrive_get_person,
-    "pipedrive_get_organization": pipedrive_get_organization,
-    "pipedrive_get_deal_notes": pipedrive_get_deal_notes,
+    "pipedrive_get_deal":         lambda d: pipedrive_get_deal(d["deal_id"]),
+    "pipedrive_update_deal":      lambda d: pipedrive_update_deal(d["deal_id"], d["fields"]),
+    "pipedrive_get_person":       lambda d: pipedrive_get_person(d["person_id"]),
+    "pipedrive_get_organization": lambda d: pipedrive_get_organization(d["org_id"]),
+    "pipedrive_get_deal_notes":   lambda d: pipedrive_get_deal_notes(d["deal_id"]),
 }
