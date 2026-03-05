@@ -167,6 +167,11 @@ def upsert_invoice_state(deal_id: int, **kwargs) -> dict:
     return get_invoice_state(deal_id)
 
 
+def get_or_create_invoice_state(deal_id: int) -> dict:
+    """Gibt den bestehenden Invoice-State zurück oder legt einen neuen an."""
+    return upsert_invoice_state(deal_id)
+
+
 def get_invoice_state(deal_id: int) -> dict | None:
     with _conn() as con:
         row = con.execute(
