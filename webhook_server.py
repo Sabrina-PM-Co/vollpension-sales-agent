@@ -141,14 +141,13 @@ async def pipedrive_new_deal(request: Request, background_tasks: BackgroundTasks
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Ungültiger JSON-Payload")
 
-    meta    = payload.get("meta", {})
-    action  = meta.get("action", "")
-    obj     = meta.get("object", "")
-    current = payload.get("current", {})
+    meta     = payload.get("meta", {})
+    action   = meta.get("action", "")
+    obj      = meta.get("entity", "") or meta.get("object", "")  # v2: "entity", v1: "object"
+    current  = payload.get("data", {}) or payload.get("current", {})
     previous = payload.get("previous", {})
 
-    # DEBUG – zeigt die rohe Pipedrive Payload-Struktur
-    logger.info(f"🔍 Pipedrive Payload: action={action!r}, obj={obj!r}, keys={list(payload.keys())}, meta_keys={list(meta.keys())}")
+    logger.info(f"📨 Pipedrive Event: action={action!r}, entity={obj!r}, deal_id={current.get('id')}")
 
     if obj != "deal":
         return JSONResponse({"status": "ignored", "reason": "Kein Deal-Event"})
@@ -157,19 +156,19 @@ async def pipedrive_new_deal(request: Request, background_tasks: BackgroundTasks
     if not deal_id:
         return JSONResponse({"status": "ignored", "reason": "Keine Deal-ID"})
 
-    # Trigger 1: Neuer Deal angelegt
-    if action == "added":
+    # Trigger 1: Neuer Deal angelegt (v2: "create", v1: "added")
+    if action in ("create", "added"):
         logger.info(f"📥 Neuer Deal angelegt: ID={deal_id}")
         background_tasks.add_task(_bg, process_new_deal, deal_id, current)
         return JSONResponse({"status": "accepted", "deal_id": deal_id, "trigger": "added"})
 
-    # Trigger 2: Deal in Stage "Anfragen" verschoben (manuell oder via Automation)
-    if action == "updated" and PIPEDRIVE_STAGE_ANFRAGEN:
+    # Trigger 2: Deal in Stage "Anfragen" verschoben (v2: "change", v1: "updated")
+    if action in ("change", "updated") and PIPEDRIVE_STAGE_ANFRAGEN:
         current_stage  = current.get("stage_id")
         previous_stage = previous.get("stage_id")
         if (current_stage == PIPEDRIVE_STAGE_ANFRAGEN
                 and previous_stage != PIPEDRIVE_STAGE_ANFRAGEN):
-            logger.info(f"📥 Deal {deal_id} in Stage 'Anfragen' verschoben (Stage {previous_stage} → {current_stage})")
+            logger.info(f"📥 Deal {deal_id} → Stage 'Anfragen' ({previous_stage} → {current_stage})")
             background_tasks.add_task(_bg, process_new_deal, deal_id, current)
             return JSONResponse({"status": "accepted", "deal_id": deal_id, "trigger": "stage_change"})
 
