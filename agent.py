@@ -295,12 +295,12 @@ INTERIM_SYSTEM_PROMPT = """Du bist ein B2B-Vertriebsassistent der Vollpension Ge
 Du bearbeitest neue Deals in Pipedrive – OHNE Sevdesk (vorübergehender Interim-Modus).
 
 ═══════════════════════════════════════════════════════════
-FIRMEN-KONTEXT (WICHTIG!)
+FIRMEN-KONTEXT (unbedingt beachten!)
 ═══════════════════════════════════════════════════════════
-• Vollpension ist in WIEN ansässig und liefert österreichweit.
-• Alle Lieferungen/Einsätze sind INLAND (Österreich).
-  → NIEMALS „Ausland", „International" oder „Export" als Produkte wählen.
-  → Graz, Salzburg, Linz, Innsbruck etc. = Inland-Lieferung ab Wien.
+• Vollpension hat ihren Standort in WIEN und liefert/fährt österreichweit.
+• ALLE Einsätze innerhalb Österreichs sind INLAND – auch Graz, Salzburg,
+  Linz, Innsbruck, Klagenfurt usw.
+• NIEMALS ein Produkt mit „Ausland" oder „International" wählen!
 • Sprache der Notizen: Deutsch oder Englisch – beides ist normal.
 
 ═══════════════════════════════════════════════════════════
@@ -313,39 +313,45 @@ SCHRITT-FÜR-SCHRITT WORKFLOW
    → pipedrive_get_person(person_id)
    → pipedrive_get_organization(org_id) falls vorhanden
 
-2. KATEGORIE BESTIMMEN (Pflicht!)
-   Erkenne die Kategorie aus Deal-Titel UND Notizen:
-   • „Buchtelmobil", „Buchtel", „Pop-up", „Catering extern" → Buchtelmobil (ID 30)
-   • „Pop-up Café" → Pop-up Café inkl. Buchtelmobil (ID 56)
-   • „Backkurs", „Backworkshop", „Teambuilding back" → Teambuilding Backkurs (ID 28)
-   • „Studio", „Miete", „Raummiete" ohne Backkurs → Studio-Miete (ID 55)
-   • „Studio" + „Backkurs" → Studio mit Backkurs (ID 392)
-   • „Tortenabo", „Abo" → Tortenabo (ID 57)
-   • „Torten", „Kekse", „Gebäck" → Torten & Kekse (ID 108)
-   • „Weihnachtsfeier" ohne Backkurs → Weihnachtsfeier (ID 54)
-   • „Weihnachtsfeier" + Backkurs → Weihnachtsfeier inkl. Backkurs (ID 387)
-   • „Catering" (allgemein) → Catering (ID 187)
-   • „Frühstück", „Business Breakfast" → Business-Frühstück im Café (ID 199)
-   • „Gutschein" → Gutscheine (ID 339)
-   • „Keynote" → Keynote (ID 362)
-   • „NGO", „Workshop" → Workshop NGO (ID 53)
-   → Mehrere Kategorien sind möglich, z.B. Buchtelmobil + Catering
-
-3. PRODUKTE AUS KATALOG LADEN & HINZUFÜGEN
+2. PRODUKTE AUS KATALOG LADEN
    → pipedrive_list_products()
-   → Wähle Produkte die zur erkannten Kategorie passen.
-   → pipedrive_add_deal_product(deal_id, product_id, item_price, quantity)
-      für jedes passende Produkt.
-   → KEIN Produkt mit „Ausland", „International" oder „Export" im Namen!
-     (Alle Lieferungen sind österreichisches Inland.)
+   → Liste alle Produkte auf, lies ihre Namen genau.
 
-4. DEAL AKTUALISIEREN (ein API-Call für alle Felder)
+3. PASSENDE PRODUKTE HINZUFÜGEN
+   Wähle Produkte die zur Anfrage passen (Deal-Titel + Notizen).
+
+   ── TRANSPORTKOSTEN BUCHTELMOBIL ──────────────────────────────
+   Ausgangsort: IMMER Wien. Wähle GENAU EINES dieser Produkte:
+
+   • "Transportkosten Buchtelmobil innerhalb Wien"
+     → Einsatzort liegt IN Wien (alle Bezirke inkl. Randbezirke)
+
+   • "Transportkosten Buchtelmobil Österreich kleiner 50km"
+     → ~0–50 km von Wien: Mödling, Baden, Klosterneuburg,
+       Schwechat, Bruck an der Leitha
+
+   • "Transportkosten Buchtelmobil Österreich kleiner 150km"
+     → ~50–150 km von Wien: St. Pölten (~65 km), Krems (~80 km),
+       Wiener Neustadt (~60 km), Eisenstadt (~55 km), Amstetten (~130 km)
+
+   • "Transportkosten Buchtelmobil Österreich größer 150km"
+     → > 150 km von Wien – STANDARD für andere Bundesländer:
+       Graz (~200 km), Linz (~190 km), Salzburg (~295 km),
+       Innsbruck (~490 km), Klagenfurt (~310 km), Bregenz (~700 km)
+
+   NIEMALS „Speditionskosten Ausland" oder ähnliches – Österreich ist INLAND!
+
+   ── SONSTIGE PRODUKTE ─────────────────────────────────────────
+   Alle weiteren Produkte nach Passform zur Anfrage auswählen.
+
+   → pipedrive_add_deal_product(deal_id, product_id, item_price, quantity)
+      für jedes passende Produkt separat aufrufen.
+
+4. STAGE AKTUALISIEREN
    → pipedrive_update_deal mit:
-     - "stage_id": {stage_in_bearbeitung}                ← IMMER setzen
-     - "{interessensgebiet}": "30"                       ← IMMER setzen!
-       Komma-getrennte Option-IDs als String: "30" oder "30,56"
-       (NICHT als Liste/Array, sondern als String!)
-     - "{ust_id}": "AT..."  nur wenn UST-ID in Notizen/Firmendaten steht
+     - "stage_id": {stage_in_bearbeitung}   ← IMMER setzen
+     - "{ust_id}": "AT..."  nur wenn UST-ID explizit in Notizen/Firmendaten steht
+   (Das Interessensgebiet-Feld wird automatisch gesetzt – du musst es NICHT setzen.)
 
 5. JSON-ZUSAMMENFASSUNG ausgeben:
 {{
@@ -353,52 +359,98 @@ SCHRITT-FÜR-SCHRITT WORKFLOW
   "deal_title": "...",
   "contact_name": "...",
   "contact_email": "...",
-  "kategorie": "Buchtelmobil|Backkurs|Studio|...",
-  "interessensgebiet_ids": "30",
+  "einsatzort": "Graz",
+  "einsatzort_km_von_wien": 200,
+  "kategorie": "Buchtelmobil|Backkurs|Studio|Pop-up Café|...",
   "products_added": [
     {{"product_id": 1, "name": "...", "price": 0.0, "quantity": 1}}
   ],
-  "interessensgebiet_gesetzt": true,
   "ust_id_gesetzt": false,
   "hinweise": "Offene Fragen oder Interpretation (leer wenn alles klar)"
 }}
-
-═══════════════════════════════════════════════════════════
-INTERESSENSGEBIET: ALLE OPTION-IDs
-═══════════════════════════════════════════════════════════
-30  = Buchtelmobil
-56  = Pop-up Café (inkl. Buchtelmobil)
-55  = Studio-Miete
-392 = Studio mit Backkurs
-203 = Private Studio-Veranstaltung
-28  = Teambuilding Backkurs
-57  = Tortenabo
-108 = Torten & Kekse
-54  = Weihnachtsfeier
-387 = Weihnachtsfeier inkl. Backkurs
-187 = Catering
-199 = Business-Frühstück im Café
-200 = Private Feier
-201 = Reisegruppe
-29  = Geschenke mit sozialer Mission
-339 = Gutscheine
-331 = AI Backchallenge
-362 = Keynote
-58  = Franchise
-188 = Partnerschaft
-202 = Content-Produktion
-53  = Workshop NGO
-27  = Generationenmanagement
-
-API-FORMAT für das Set-Feld:
-  Einzelne Option:   "{interessensgebiet}": "30"
-  Mehrere Optionen:  "{interessensgebiet}": "30,56"
-  (Komma-getrennter String – NICHT als Python-Liste oder JSON-Array!)
 """.format(
     stage_in_bearbeitung=PIPEDRIVE_STAGE_IN_BEARBEITUNG,
-    interessensgebiet=FIELD_INTERESSENSGEBIET,
     ust_id="7301275cac15a5a489babf360802632b40633b59",  # FIELD_UST_ID
 )
+
+
+# ─── Keyword → Interessensgebiet Option-ID (Python, kein LLM nötig) ──────────
+
+def _detect_interessensgebiet(title: str, notes: str, kategorie: str) -> str | None:
+    """
+    Erkennt das Interessensgebiet aus Deal-Titel, Notizen und Agenten-Kategorie.
+    Gibt Option-IDs als komma-getrennten String zurück (Pipedrive Set-Feld Format).
+    Spezifischere Muster zuerst, um Fehl-Matches zu vermeiden.
+    """
+    text = " ".join([title, notes, kategorie]).lower()
+    ids: list[int] = []
+
+    # Weihnachtsfeier (spezifisch zuerst)
+    if "weihnachtsfeier" in text and ("backkurs" in text or "backworkshop" in text):
+        ids.append(387)
+    elif "weihnachtsfeier" in text:
+        ids.append(54)
+
+    # Studio + Backkurs (spezifisch vor reinem Studio)
+    if "studio" in text and ("backkurs" in text or "backworkshop" in text) and 387 not in ids:
+        ids.append(392)
+    elif "studio" in text and 387 not in ids and 392 not in ids:
+        ids.append(55)
+
+    # Pop-up Café (vor Buchtelmobil prüfen – ist spezifischer)
+    if any(w in text for w in ["pop-up café", "popup café", "pop-up cafe", "popup cafe", "pop up café"]):
+        ids.append(56)
+    elif any(w in text for w in ["buchtelmobil", "buchtel mobil", "buchtel"]):
+        if 56 not in ids:
+            ids.append(30)
+
+    # Backkurs standalone
+    if ("backkurs" in text or "backworkshop" in text or "back-kurs" in text) \
+            and not any(x in ids for x in [28, 387, 392]):
+        ids.append(28)
+
+    # Torten / Abo
+    if "tortenabo" in text or "torten-abo" in text:
+        ids.append(57)
+    elif any(w in text for w in ["torten", "kekse", "gebäck"]) and 57 not in ids:
+        ids.append(108)
+
+    # Catering (nur wenn kein Pop-up Café erkannt)
+    if "catering" in text and 56 not in ids:
+        ids.append(187)
+
+    # Sonstige Kategorien
+    if any(w in text for w in ["frühstück", "fruehstueck", "breakfast", "business breakfast"]):
+        ids.append(199)
+    if "gutschein" in text:
+        ids.append(339)
+    if "keynote" in text:
+        ids.append(362)
+    if "ngo" in text:
+        ids.append(53)
+    if "generationenmanagement" in text:
+        ids.append(27)
+    if "ai backchallenge" in text or ("ai" in text and "back" in text and "challenge" in text):
+        ids.append(331)
+    if "franchise" in text:
+        ids.append(58)
+    if "partnerschaft" in text:
+        ids.append(188)
+    if "content" in text and "produktion" in text:
+        ids.append(202)
+    if any(w in text for w in ["private feier", "privatfeier", "geburtstagsfeier", "privatveranstaltung"]):
+        ids.append(200)
+    if "reisegruppe" in text:
+        ids.append(201)
+    if "geschenke" in text:
+        ids.append(29)
+
+    if not ids:
+        return None
+    # Duplikate entfernen, Reihenfolge beibehalten
+    seen: set[int] = set()
+    unique = [i for i in ids if not (i in seen or seen.add(i))]
+    return ",".join(str(i) for i in unique)
 
 
 def process_new_deal_interim(deal_id: int, deal_data: dict | None = None) -> dict:
@@ -406,46 +458,29 @@ def process_new_deal_interim(deal_id: int, deal_data: dict | None = None) -> dic
     Interim-Workflow: Verarbeitet neue Deals OHNE Sevdesk-Angebotserstellung.
 
     Ablauf:
-      1. Agent liest Deal + Notizen + Kontakt aus Pipedrive
-      2. Fügt passende Pipedrive-Produkte zum Deal hinzu
-      3. Aktualisiert Interessensgebiet + UST-ID + Stage "In Bearbeitung"
-      4. Postet Slack-Benachrichtigung mit Pipedrive-Link
+      1. Agent liest Deal + Notizen + Kontakt, wählt & fügt Produkte hinzu
+      2. Python setzt Interessensgebiet direkt via Keyword-Matching (zuverlässig)
+      3. Slack-Benachrichtigung mit Pipedrive-Link
 
-    Wird durch den Webhook ausgelöst und läuft als Background Task.
-    Sobald Sevdesk POST /Order funktioniert → Webhook auf process_new_deal zurückstellen.
-
-    Args:
-        deal_id:   Pipedrive Deal-ID aus dem Webhook
-        deal_data: Optional vorgeladene Deal-Daten (z.B. aus Webhook-Payload)
-
-    Returns:
-        {"success": bool, "deal_id": int, "error": str|None}
+    Sobald Sevdesk POST /Order funktioniert:
+      webhook_server.py → eine Zeile auf process_new_deal zurückstellen.
     """
-    print(f"\\n{'='*60}")
+    print(f"\n{'='*60}")
     print(f"🚀 [INTERIM] Neuer Deal: {deal_id}")
     print(f"{'='*60}")
 
     run_id = start_run(workflow_type="interim", deal_id=deal_id, model="claude-opus-4-5-20251101")
 
-    # Bekanntes Interessensgebiet prüfen
-    hat_bekanntes_interesse = bool(
-        deal_data and get_interessensgebiet_ids(deal_data.get(FIELD_INTERESSENSGEBIET))
-    )
-
-    initial_message = f"""Neuer Deal eingegangen!
-
-Deal-ID: {deal_id}
-Bekanntes Interessensgebiet: {"ja" if hat_bekanntes_interesse else "NEIN – bitte aus Notizen und Titel ableiten"}
+    initial_message = f"""Neuer Deal eingegangen! Deal-ID: {deal_id}
 
 Bitte führe die Schritte 1–5 aus dem System-Prompt durch:
 1. Deal + Notizen + Kontakt laden
-2. Produkte aus dem Katalog abrufen
-3. Passende Produkte zum Deal hinzufügen
-4. Felder + Stage aktualisieren
+2. Produkte aus dem Katalog abrufen (pipedrive_list_products)
+3. Passende Produkte zum Deal hinzufügen – inkl. korrekte Transportkosten!
+4. Stage auf „In Bearbeitung" setzen
 5. JSON-Zusammenfassung ausgeben
 """
 
-    # Nur Pipedrive-Tools (kein Sevdesk)
     result = run_agent(
         system_prompt=INTERIM_SYSTEM_PROMPT,
         initial_message=initial_message,
@@ -486,17 +521,41 @@ Bitte führe die Schritte 1–5 aus dem System-Prompt durch:
     except Exception:
         pass
 
-    deal_title    = summary_data.get("deal_title")    or f"Deal #{deal_id}"
-    contact_name  = summary_data.get("contact_name")  or ""
-    contact_email = summary_data.get("contact_email") or ""
-    kategorie     = summary_data.get("kategorie")     or "Unbekannt"
+    deal_title     = summary_data.get("deal_title")    or f"Deal #{deal_id}"
+    contact_name   = summary_data.get("contact_name")  or ""
+    contact_email  = summary_data.get("contact_email") or ""
+    kategorie      = summary_data.get("kategorie")     or ""
     products_added = summary_data.get("products_added") or []
-    hinweis       = summary_data.get("hinweise")      or ""
+    hinweis        = summary_data.get("hinweise")      or ""
 
-    # ── Pipedrive-Link aufbauen ────────────────────────────────────────────
+    # ── Interessensgebiet direkt in Python setzen (zuverlässiger als via Agent) ──
+    title_raw = deal_data.get("title", "") if deal_data else deal_title
+    notes_raw = ""  # Agent hat Notizen bereits gelesen; Kategorie ist ausreichend
+
+    interesse_ids = _detect_interessensgebiet(title_raw, notes_raw, kategorie)
+
+    # Fallback: Interessensgebiet war schon im Webhook-Payload gesetzt
+    if not interesse_ids and deal_data:
+        existing = get_interessensgebiet_ids(deal_data.get(FIELD_INTERESSENSGEBIET))
+        if existing:
+            interesse_ids = ",".join(str(i) for i in existing)
+
+    if interesse_ids:
+        try:
+            from pipedrive_tools import pipedrive_update_deal as _pd_update
+            _pd_update(deal_id, {FIELD_INTERESSENSGEBIET: interesse_ids})
+            print(f"   ✅ Interessensgebiet gesetzt: {interesse_ids}")
+        except Exception as e:
+            print(f"   ⚠️ Interessensgebiet-Fehler: {e}")
+            hinweis = f"Interessensgebiet ({interesse_ids}) konnte nicht gesetzt werden. " + hinweis
+    else:
+        print(f"   ⚠️ Interessensgebiet: kein Keyword erkannt – bitte manuell prüfen")
+        hinweis = "Interessensgebiet unklar – bitte manuell setzen. " + hinweis
+
+    # ── Pipedrive-Link + Slack ─────────────────────────────────────────────
     pipedrive_link = f"https://{PIPEDRIVE_DOMAIN}.pipedrive.com/deal/{deal_id}"
+    display_kategorie = kategorie or (f"IDs: {interesse_ids}" if interesse_ids else "Unbekannt")
 
-    # ── Slack-Benachrichtigung ─────────────────────────────────────────────
     try:
         post_deal_notification(
             deal_id=deal_id,
@@ -504,18 +563,19 @@ Bitte führe die Schritte 1–5 aus dem System-Prompt durch:
             contact_name=contact_name,
             contact_email=contact_email,
             pipedrive_link=pipedrive_link,
-            kategorie=kategorie,
+            kategorie=display_kategorie,
             products_added=products_added,
-            hinweis=hinweis,
+            hinweis=hinweis.strip(),
         )
-        print(f"   ✅ [Interim] Deal #{deal_id} bearbeitet → Slack-Benachrichtigung gesendet")
+        print(f"   ✅ [Interim] Deal #{deal_id} → Slack gesendet")
     except Exception as e:
         print(f"   ⚠️ Slack-Fehler: {e}")
 
     return {
-        "success":  True,
-        "deal_id":  deal_id,
-        "kategorie": kategorie,
-        "products": len(products_added),
-        "error":    None,
+        "success":            True,
+        "deal_id":            deal_id,
+        "kategorie":          display_kategorie,
+        "interessensgebiet":  interesse_ids,
+        "products":           len(products_added),
+        "error":              None,
     }
