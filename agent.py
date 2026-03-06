@@ -18,7 +18,7 @@ import json
 import re
 import anthropic
 
-from config          import ANTHROPIC_API_KEY, PIPEDRIVE_STAGE_IN_BEARBEITUNG
+from config          import ANTHROPIC_API_KEY, PIPEDRIVE_STAGE_IN_BEARBEITUNG, PIPEDRIVE_DOMAIN
 from pipedrive_tools import PIPEDRIVE_TOOL_DEFINITIONS, PIPEDRIVE_TOOL_MAP
 from sevdesk_tools   import SEVDESK_TOOL_DEFINITIONS,   SEVDESK_TOOL_MAP
 from agent_runner    import run_agent
@@ -29,7 +29,7 @@ from pipedrive_fields import (
     get_interessensgebiet_ids,
 )
 from state_manager   import create_approval_request, add_agent_note, get_or_create_invoice_state
-from slack_approval  import send_approval_request, post_status_update
+from slack_approval  import send_approval_request, post_status_update, post_deal_notification
 from audit_logger    import start_run, finish_run
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -286,4 +286,211 @@ Wichtig: Nur Entwurf – nicht versenden!
         "request_id":   req["id"],
         "anfrage_typ":  anfrage_typ,
         "error":        None,
+    }
+
+
+# ─── Interim Workflow (Sevdesk vorübergehend nicht verfügbar) ──────────────────
+
+INTERIM_SYSTEM_PROMPT = """Du bist ein B2B-Vertriebsassistent der Vollpension Generationendialog GmbH.
+Du bearbeitest neue Deals in Pipedrive – OHNE Sevdesk (vorübergehender Interim-Modus).
+
+═══════════════════════════════════════════════════════════
+SCHRITT-FÜR-SCHRITT WORKFLOW
+═══════════════════════════════════════════════════════════
+
+1. DEAL LADEN
+   → pipedrive_get_deal(deal_id)
+   → pipedrive_get_deal_notes(deal_id)  ← Kundenanfrage-Freitext!
+   → pipedrive_get_person(person_id)
+   → pipedrive_get_organization(org_id) falls vorhanden
+
+2. PRODUKTE AUS KATALOG LADEN
+   → pipedrive_list_products()
+   → Sieh dir alle verfügbaren Produkte an (Name, Preis, Einheit)
+
+3. PASSENDE PRODUKTE HINZUFÜGEN
+   → Wähle Produkte basierend auf:
+     a) Interessensgebiet-Feld im Deal (Option-IDs – sieh Referenz unten)
+     b) Freitext der Kundenanfrage aus den Notizen
+     c) Deal-Titel
+   → pipedrive_add_deal_product(deal_id, product_id, item_price, quantity)
+      für jedes passende Produkt
+   → Bei unklarer Anfrage: ergänze die wahrscheinlichste Kategorie und notiere
+     deine Interpretation in "hinweise"
+
+4. DEAL AKTUALISIEREN
+   → pipedrive_update_deal mit einem einzigen API-Call:
+     - "stage_id": {stage_in_bearbeitung}   ← IMMER setzen
+     - Falls Interessensgebiet NICHT gesetzt UND du kennst die richtige Option-ID(s)
+       mit hoher Sicherheit: "{interessensgebiet}": [option_id1, option_id2]
+     - Falls UST-ID in Notizen oder Firmendaten erwähnt: "{ust_id}": "AT..."
+
+5. JSON-ZUSAMMENFASSUNG ausgeben:
+{{
+  "deal_id": 123,
+  "deal_title": "...",
+  "contact_name": "...",
+  "contact_email": "...",
+  "kategorie": "Buchtelmobil|Backkurs|Studio|Popup-Café|Torten|...",
+  "products_added": [
+    {{"product_id": 1, "name": "...", "price": 0.0, "quantity": 1}}
+  ],
+  "interessensgebiet_gesetzt": true,
+  "ust_id_gesetzt": false,
+  "hinweise": "Offene Fragen oder Interpretation (leer wenn alles klar)"
+}}
+
+═══════════════════════════════════════════════════════════
+INTERESSENSGEBIET OPTION-IDs (Referenz)
+═══════════════════════════════════════════════════════════
+30  = Buchtelmobil
+56  = Pop-up Café (inkl. Buchtelmobil)
+55  = Studio-Miete
+392 = Studio mit Backkurs
+203 = Private Studio-Veranstaltung
+28  = Teambuilding Backkurs
+57  = Tortenabo
+108 = Torten & Kekse
+54  = Weihnachtsfeier
+387 = Weihnachtsfeier inkl. Backkurs
+187 = Catering
+199 = Business-Frühstück im Café
+200 = Private Feier
+201 = Reisegruppe
+29  = Geschenke mit sozialer Mission
+339 = Gutscheine
+331 = AI Backchallenge
+362 = Keynote
+58  = Franchise
+188 = Partnerschaft
+202 = Content-Produktion
+53  = Workshop NGO
+27  = Generationenmanagement
+
+Das Feld ist ein "set" (Mehrfachauswahl). Setze es als Liste: [{{"id": 30}}]
+Setze es NUR wenn du dir mit der Kategorie sehr sicher bist (>90% Wahrscheinlichkeit).
+""".format(
+    stage_in_bearbeitung=PIPEDRIVE_STAGE_IN_BEARBEITUNG,
+    interessensgebiet=FIELD_INTERESSENSGEBIET,
+    ust_id="7301275cac15a5a489babf360802632b40633b59",  # FIELD_UST_ID
+)
+
+
+def process_new_deal_interim(deal_id: int, deal_data: dict | None = None) -> dict:
+    """
+    Interim-Workflow: Verarbeitet neue Deals OHNE Sevdesk-Angebotserstellung.
+
+    Ablauf:
+      1. Agent liest Deal + Notizen + Kontakt aus Pipedrive
+      2. Fügt passende Pipedrive-Produkte zum Deal hinzu
+      3. Aktualisiert Interessensgebiet + UST-ID + Stage "In Bearbeitung"
+      4. Postet Slack-Benachrichtigung mit Pipedrive-Link
+
+    Wird durch den Webhook ausgelöst und läuft als Background Task.
+    Sobald Sevdesk POST /Order funktioniert → Webhook auf process_new_deal zurückstellen.
+
+    Args:
+        deal_id:   Pipedrive Deal-ID aus dem Webhook
+        deal_data: Optional vorgeladene Deal-Daten (z.B. aus Webhook-Payload)
+
+    Returns:
+        {"success": bool, "deal_id": int, "error": str|None}
+    """
+    print(f"\\n{'='*60}")
+    print(f"🚀 [INTERIM] Neuer Deal: {deal_id}")
+    print(f"{'='*60}")
+
+    run_id = start_run(workflow_type="interim", deal_id=deal_id, model="claude-opus-4-5-20251101")
+
+    # Bekanntes Interessensgebiet prüfen
+    hat_bekanntes_interesse = bool(
+        deal_data and get_interessensgebiet_ids(deal_data.get(FIELD_INTERESSENSGEBIET))
+    )
+
+    initial_message = f"""Neuer Deal eingegangen!
+
+Deal-ID: {deal_id}
+Bekanntes Interessensgebiet: {"ja" if hat_bekanntes_interesse else "NEIN – bitte aus Notizen und Titel ableiten"}
+
+Bitte führe die Schritte 1–5 aus dem System-Prompt durch:
+1. Deal + Notizen + Kontakt laden
+2. Produkte aus dem Katalog abrufen
+3. Passende Produkte zum Deal hinzufügen
+4. Felder + Stage aktualisieren
+5. JSON-Zusammenfassung ausgeben
+"""
+
+    # Nur Pipedrive-Tools (kein Sevdesk)
+    result = run_agent(
+        system_prompt=INTERIM_SYSTEM_PROMPT,
+        initial_message=initial_message,
+        tools=PIPEDRIVE_TOOL_DEFINITIONS,
+        tool_map=PIPEDRIVE_TOOL_MAP,
+        workflow_type="interim",
+        deal_id=deal_id,
+        max_turns=12,
+    )
+
+    finish_run(run_id, status="completed" if not result["error"] else "failed",
+               error=result.get("error"))
+
+    if result["error"]:
+        post_status_update(f"❌ [Interim] Deal #{deal_id} Verarbeitung fehlgeschlagen: {result['error']}")
+        return {"success": False, "deal_id": deal_id, "error": result["error"]}
+
+    # ── Ergebnis parsen ───────────────────────────────────────────────────
+    summary_data: dict = {}
+    try:
+        decoder = json.JSONDecoder()
+        text = result["summary"]
+        idx = 0
+        while idx < len(text):
+            brace = text.find('{', idx)
+            if brace == -1:
+                break
+            try:
+                parsed, _ = decoder.raw_decode(text, brace)
+                if isinstance(parsed, dict) and parsed.get("deal_id"):
+                    summary_data = parsed
+                    break
+                if isinstance(parsed, dict) and len(parsed) > len(summary_data):
+                    summary_data = parsed
+                idx = brace + 1
+            except json.JSONDecodeError:
+                idx = brace + 1
+    except Exception:
+        pass
+
+    deal_title    = summary_data.get("deal_title")    or f"Deal #{deal_id}"
+    contact_name  = summary_data.get("contact_name")  or ""
+    contact_email = summary_data.get("contact_email") or ""
+    kategorie     = summary_data.get("kategorie")     or "Unbekannt"
+    products_added = summary_data.get("products_added") or []
+    hinweis       = summary_data.get("hinweise")      or ""
+
+    # ── Pipedrive-Link aufbauen ────────────────────────────────────────────
+    pipedrive_link = f"https://{PIPEDRIVE_DOMAIN}.pipedrive.com/deal/{deal_id}"
+
+    # ── Slack-Benachrichtigung ─────────────────────────────────────────────
+    try:
+        post_deal_notification(
+            deal_id=deal_id,
+            deal_title=deal_title,
+            contact_name=contact_name,
+            contact_email=contact_email,
+            pipedrive_link=pipedrive_link,
+            kategorie=kategorie,
+            products_added=products_added,
+            hinweis=hinweis,
+        )
+        print(f"   ✅ [Interim] Deal #{deal_id} bearbeitet → Slack-Benachrichtigung gesendet")
+    except Exception as e:
+        print(f"   ⚠️ Slack-Fehler: {e}")
+
+    return {
+        "success":  True,
+        "deal_id":  deal_id,
+        "kategorie": kategorie,
+        "products": len(products_added),
+        "error":    None,
     }

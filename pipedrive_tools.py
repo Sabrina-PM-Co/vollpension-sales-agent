@@ -184,6 +184,77 @@ def pipedrive_get_deal_notes(deal_id: int) -> str:
         return _err(e)
 
 
+def pipedrive_list_products() -> str:
+    """
+    Listet alle verfügbaren Produkte aus dem Pipedrive-Produktkatalog auf.
+
+    Returns:
+        JSON-String mit allen Produkten (id, name, code, unit, tax, prices).
+        Prices enthält Preis und Währung je Produkt.
+    """
+    try:
+        with httpx.Client() as c:
+            r = c.get(f"{BASE}/products", params=_params({"limit": 100}), timeout=30)
+            r.raise_for_status()
+            items = r.json().get("data") or []
+        products = [
+            {
+                "id":          p.get("id"),
+                "name":        p.get("name"),
+                "code":        p.get("code"),
+                "description": p.get("description"),
+                "unit":        p.get("unit"),
+                "tax":         p.get("tax"),
+                "prices":      p.get("prices"),
+            }
+            for p in items
+        ]
+        return json.dumps({"products": products, "count": len(products)}, indent=2, ensure_ascii=False)
+    except Exception as e:
+        return _err(e)
+
+
+def pipedrive_add_deal_product(
+    deal_id: int,
+    product_id: int,
+    item_price: float,
+    quantity: int = 1,
+    discount: float = 0.0,
+) -> str:
+    """
+    Fügt ein Produkt aus dem Pipedrive-Katalog zu einem Deal hinzu.
+
+    Args:
+        deal_id:    ID des Deals.
+        product_id: ID des Produkts (aus pipedrive_list_products).
+        item_price: Preis pro Einheit in EUR.
+        quantity:   Menge (Standard: 1).
+        discount:   Rabatt in Prozent (Standard: 0).
+
+    Returns:
+        JSON-String mit Status und den hinzugefügten Deal-Produkt-Daten.
+    """
+    try:
+        with httpx.Client() as c:
+            r = c.post(
+                f"{BASE}/deals/{deal_id}/products",
+                params=_params(),
+                json={
+                    "product_id":          product_id,
+                    "item_price":          item_price,
+                    "quantity":            quantity,
+                    "discount_percentage": discount,
+                    "enabled_flag":        1,
+                },
+                timeout=30,
+            )
+            r.raise_for_status()
+            data = r.json().get("data", {})
+        return json.dumps({"status": "added", "deal_product": data}, indent=2, ensure_ascii=False)
+    except Exception as e:
+        return _err(e)
+
+
 # ─── Verfügbare Tools für Claude ──────────────────────────────────────────────
 
 PIPEDRIVE_TOOL_DEFINITIONS = [
@@ -280,12 +351,49 @@ PIPEDRIVE_TOOL_DEFINITIONS = [
             "required": ["deal_id"],
         },
     },
+    {
+        "name": "pipedrive_list_products",
+        "description": (
+            "Listet alle verfügbaren Produkte aus dem Pipedrive-Produktkatalog auf. "
+            "Gibt id, name, unit, tax und prices (Preis/Währung) zurück. "
+            "Aufrufen bevor Produkte zu einem Deal hinzugefügt werden."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "pipedrive_add_deal_product",
+        "description": (
+            "Fügt ein Produkt aus dem Pipedrive-Katalog zu einem Deal hinzu. "
+            "Benötigt product_id (aus pipedrive_list_products) und item_price. "
+            "Für jedes passende Produkt separat aufrufen."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "deal_id":    {"type": "integer", "description": "ID des Deals."},
+                "product_id": {"type": "integer", "description": "ID des Produkts aus dem Katalog."},
+                "item_price": {"type": "number",  "description": "Preis pro Einheit in EUR."},
+                "quantity":   {"type": "integer", "description": "Menge (Standard: 1)."},
+                "discount":   {"type": "number",  "description": "Rabatt in Prozent (Standard: 0)."},
+            },
+            "required": ["deal_id", "product_id", "item_price"],
+        },
+    },
 ]
 
 PIPEDRIVE_TOOL_MAP = {
-    "pipedrive_get_deal":         lambda d: pipedrive_get_deal(d["deal_id"]),
-    "pipedrive_update_deal":      lambda d: pipedrive_update_deal(d["deal_id"], d["fields"]),
-    "pipedrive_get_person":       lambda d: pipedrive_get_person(d["person_id"]),
-    "pipedrive_get_organization": lambda d: pipedrive_get_organization(d["org_id"]),
-    "pipedrive_get_deal_notes":   lambda d: pipedrive_get_deal_notes(d["deal_id"]),
+    "pipedrive_get_deal":          lambda d: pipedrive_get_deal(d["deal_id"]),
+    "pipedrive_update_deal":       lambda d: pipedrive_update_deal(d["deal_id"], d["fields"]),
+    "pipedrive_get_person":        lambda d: pipedrive_get_person(d["person_id"]),
+    "pipedrive_get_organization":  lambda d: pipedrive_get_organization(d["org_id"]),
+    "pipedrive_get_deal_notes":    lambda d: pipedrive_get_deal_notes(d["deal_id"]),
+    "pipedrive_list_products":     lambda d: pipedrive_list_products(),
+    "pipedrive_add_deal_product":  lambda d: pipedrive_add_deal_product(
+        d["deal_id"], d["product_id"], d["item_price"],
+        d.get("quantity", 1), d.get("discount", 0.0),
+    ),
 }

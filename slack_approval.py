@@ -410,6 +410,105 @@ def post_status_update(message: str, thread_ts: str = None, request_type: str = 
     _slack_post("chat.postMessage", payload)
 
 
+# ─── Interim-Workflow: Deal-Benachrichtigung (ohne Freigabe-Buttons) ──────────
+
+def post_deal_notification(
+    deal_id: int,
+    deal_title: str,
+    contact_name: str,
+    contact_email: str,
+    pipedrive_link: str,
+    kategorie: str,
+    products_added: list,
+    hinweis: str = "",
+) -> dict:
+    """
+    Postet eine Benachrichtigung über einen neu bearbeiteten Deal ohne Freigabe-Buttons.
+    Verwendet im Interim-Workflow (solange Sevdesk POST /Order nicht verfügbar ist).
+
+    Args:
+        deal_id:        Pipedrive Deal-ID
+        deal_title:     Titel des Deals
+        contact_name:   Name der Kontaktperson
+        contact_email:  E-Mail der Kontaktperson
+        pipedrive_link: Link zum Deal in Pipedrive
+        kategorie:      Erkannte Kategorie (z.B. Buchtelmobil, Backkurs)
+        products_added: Liste der hinzugefügten Produkte [{"name": ..., "price": ..., "quantity": ...}]
+        hinweis:        Optionaler Hinweis / Interpretation für das Team
+
+    Returns:
+        {"channel": ..., "ts": ...}
+    """
+    if products_added:
+        products_text = "\n".join(
+            f"• {p.get('name', '?')} × {p.get('quantity', 1)}  (€ {float(p.get('price', 0)):,.2f})"
+            for p in products_added
+        )
+    else:
+        products_text = "_Keine Produkte hinzugefügt – bitte manuell prüfen_"
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"📥 Neuer Deal bearbeitet: {deal_title}"},
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Kontakt:*\n{contact_name}"},
+                {"type": "mrkdwn", "text": f"*E-Mail:*\n{contact_email or '–'}"},
+                {"type": "mrkdwn", "text": f"*Kategorie:*\n{kategorie or '?'}"},
+                {"type": "mrkdwn", "text": f"*Deal-ID:*\n#{deal_id}"},
+            ],
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Produkte hinzugefügt:*\n{products_text}",
+            },
+        },
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type":      "button",
+                    "text":      {"type": "plain_text", "text": "🔗 In Pipedrive öffnen"},
+                    "url":       pipedrive_link,
+                    "action_id": "open_pipedrive",
+                },
+            ],
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "ℹ️ Sevdesk-Angebot folgt sobald der Helpdesk das POST /Order Problem behoben hat.",
+                }
+            ],
+        },
+    ]
+
+    # Optionaler Hinweis-Block (bei generischen / unklaren Anfragen)
+    if hinweis:
+        blocks.insert(3, {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"💡 *Hinweis:* {hinweis}",
+            },
+        })
+
+    resp = _slack_post("chat.postMessage", {
+        "channel": SLACK_CHANNEL_OFFERS,
+        "text":    f"📥 Neuer Deal bearbeitet: {deal_title} ({contact_name})",
+        "blocks":  blocks,
+    })
+
+    return {"channel": resp["channel"], "ts": resp["ts"]}
+
+
 # ─── Event Handler: Button-Klick ──────────────────────────────────────────────
 
 def handle_interactive_action(payload: dict) -> dict:

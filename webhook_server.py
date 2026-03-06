@@ -41,7 +41,7 @@ from config          import (
     PIPEDRIVE_STAGE_ANFRAGEN, PIPEDRIVE_STAGE_ANGEBOT_GELEGT,
 )
 from pipedrive_tools import pipedrive_update_deal
-from agent           import process_new_deal
+from agent           import process_new_deal, process_new_deal_interim
 from invoice_workflow import process_deal_won, process_final_invoice, execute_after_approval
 from offer_workflow   import execute_after_change_request
 from dunning_workflow import process_dunning_check
@@ -159,7 +159,7 @@ async def pipedrive_new_deal(request: Request, background_tasks: BackgroundTasks
     # Trigger 1: Neuer Deal angelegt (v2: "create", v1: "added")
     if action in ("create", "added"):
         logger.info(f"📥 Neuer Deal angelegt: ID={deal_id}")
-        background_tasks.add_task(_bg, process_new_deal, deal_id, current)
+        background_tasks.add_task(_bg, process_new_deal_interim, deal_id, current)
         return JSONResponse({"status": "accepted", "deal_id": deal_id, "trigger": "added"})
 
     # Trigger 2: Deal in Stage "Anfragen" verschoben (v2: "change", v1: "updated")
@@ -169,7 +169,7 @@ async def pipedrive_new_deal(request: Request, background_tasks: BackgroundTasks
         if (current_stage == PIPEDRIVE_STAGE_ANFRAGEN
                 and previous_stage != PIPEDRIVE_STAGE_ANFRAGEN):
             logger.info(f"📥 Deal {deal_id} → Stage 'Anfragen' ({previous_stage} → {current_stage})")
-            background_tasks.add_task(_bg, process_new_deal, deal_id, current)
+            background_tasks.add_task(_bg, process_new_deal_interim, deal_id, current)
             return JSONResponse({"status": "accepted", "deal_id": deal_id, "trigger": "stage_change"})
 
     return JSONResponse({"status": "ignored"})
